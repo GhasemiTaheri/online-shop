@@ -1,0 +1,12 @@
+[project]
+name = "online-shop"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "M.ghasemi", email = "mghasemi13786@gmail.com" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi[standard]",
+]
