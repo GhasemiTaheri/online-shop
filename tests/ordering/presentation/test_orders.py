@@ -12,6 +12,7 @@ from ordering.domain.commands import CreateOrder
 from ordering.domain.order import Order
 from ordering.presentation.dependencies import get_ordering_messagebus
 from ordering.presentation.orders import router
+from shared.presentation.middleware import install_correlation_middleware
 
 
 class NullOrderRepository(OrderRepositoryAbs):
@@ -69,6 +70,7 @@ class RecordingMessageBus:
 
 def _app_with_bus(messagebus: RecordingMessageBus) -> FastAPI:
     app = FastAPI()
+    install_correlation_middleware(app)
     app.include_router(router)
     app.dependency_overrides[get_ordering_messagebus] = lambda: messagebus
     return app
@@ -138,6 +140,17 @@ def test_post_order_requires_a_non_empty_idempotency_key() -> None:
 
     assert response.status_code == 422
     assert messagebus.command is None
+
+
+def test_post_order_echoes_the_supplied_correlation_id() -> None:
+    response = TestClient(_app_with_bus(RecordingMessageBus())).post(
+        "/api/v1/orders",
+        headers={"Idempotency-Key": "test-key", "X-Correlation-ID": "workflow-123"},
+        json=_valid_payload(),
+    )
+
+    assert response.status_code == 201
+    assert response.headers["x-correlation-id"] == "workflow-123"
 
 
 def test_post_order_returns_conflict_for_a_different_replay() -> None:

@@ -7,7 +7,7 @@
 - IDs are opaque strings (UUID recommended).
 - Timestamps use ISO 8601 UTC.
 - Money is represented as a decimal string plus ISO currency code.
-- Mutating requests propagate `X-Correlation-ID`; the server creates one when absent and echoes it.
+- Requests propagate `X-Correlation-ID`; the server creates one when absent and echoes it in every successfully completed request response.
 - `POST /orders` requires `Idempotency-Key`.
 - List endpoints use cursor pagination with a default page size of 20 and maximum of 100.
 - Version 1 accepts only EUR monetary values.

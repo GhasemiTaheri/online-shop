@@ -4,6 +4,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from hashlib import sha256
 import json
+import logging
 from uuid import uuid4
 
 from ordering.application.idempotency import (
@@ -25,6 +26,8 @@ from ordering.domain.order import (
     ShippingAddress,
 )
 from ordering.exceptions import ApplicationException
+
+logger = logging.getLogger(__name__)
 
 
 async def create_order(command: CreateOrder, uow: OrderingUowAbs) -> Order:
@@ -49,6 +52,15 @@ async def create_order(command: CreateOrder, uow: OrderingUowAbs) -> Order:
             raise ApplicationException(
                 "The idempotency record references a missing order."
             )
+        logger.info(
+            "ordering.order_creation_replayed",
+            extra={
+                "context": "ordering",
+                "operation": "create_order",
+                "aggregate_type": "order",
+                "aggregate_id": str(order.id),
+            },
+        )
         return order
 
     items = tuple(_mock_order_item(item.product_id, item.quantity) for item in command.items)
@@ -87,6 +99,15 @@ async def create_order(command: CreateOrder, uow: OrderingUowAbs) -> Order:
             )
         )
         await uow.commit()
+    logger.info(
+        "ordering.order_created",
+        extra={
+            "context": "ordering",
+            "operation": "create_order",
+            "aggregate_type": "order",
+            "aggregate_id": str(order.id),
+        },
+    )
     return order
 
 

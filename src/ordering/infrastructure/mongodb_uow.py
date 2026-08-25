@@ -2,6 +2,7 @@
 
 from types import TracebackType
 from typing import Self
+import logging
 
 from pymongo import AsyncMongoClient
 from pymongo.asynchronous.client_session import AsyncClientSession
@@ -12,6 +13,8 @@ from ordering.infrastructure.mongodb_idempotency_repository import (
     MongoIdempotencyRepository,
 )
 from ordering.infrastructure.mongodb_repository import MongoOrderRepository
+
+logger = logging.getLogger(__name__)
 
 
 class OrderingMongoUow(OrderingUowAbs):
@@ -45,6 +48,10 @@ class OrderingMongoUow(OrderingUowAbs):
 
         self._session = session
         self._finished = False
+        logger.debug(
+            "ordering.mongodb_transaction_started",
+            extra={"context": "ordering", "operation": "mongodb_transaction"},
+        )
         return self
 
     async def __aexit__(
@@ -70,6 +77,10 @@ class OrderingMongoUow(OrderingUowAbs):
 
         await session.commit_transaction()
         self._finished = True
+        logger.info(
+            "ordering.mongodb_transaction_committed",
+            extra={"context": "ordering", "operation": "mongodb_transaction"},
+        )
 
     async def rollback(self) -> None:
         session = self._active_session()
@@ -78,6 +89,10 @@ class OrderingMongoUow(OrderingUowAbs):
 
         await session.abort_transaction()
         self._finished = True
+        logger.warning(
+            "ordering.mongodb_transaction_rolled_back",
+            extra={"context": "ordering", "operation": "mongodb_transaction"},
+        )
 
     def _active_session(self) -> AsyncClientSession:
         if self._session is None:

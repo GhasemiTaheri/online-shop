@@ -1,6 +1,7 @@
 """HTTP endpoints owned by the Ordering context."""
 
 from typing import Annotated
+import logging
 
 from fastapi import APIRouter, Depends, Header, Response, status
 from fastapi.responses import JSONResponse
@@ -22,6 +23,7 @@ from ordering.presentation.schema.responses import (
 )
 
 router = APIRouter(prefix="/api/v1/orders", tags=["orders"])
+logger = logging.getLogger(__name__)
 
 
 @router.post("", response_model=OrderResponse, status_code=status.HTTP_201_CREATED)
@@ -53,6 +55,14 @@ async def post_order(
     try:
         order = await messagebus.handle(command)
     except OrderingException as exc:
+        logger.warning(
+            "ordering.order_creation_rejected",
+            extra={
+                "context": "ordering",
+                "operation": "create_order",
+                "error_code": exc.code,
+            },
+        )
         return _to_error_response(exc)
     response.headers["Location"] = f"/api/v1/orders/{order.id}"
     return _to_order_response(order)

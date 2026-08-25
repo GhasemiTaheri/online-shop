@@ -6,6 +6,8 @@ from ordering.infrastructure.mongodb_indexes import ensure_ordering_indexes
 from ordering.presentation.orders import router as orders_router
 from settings import load_settings
 from shared.infrastructure.mongodb import create_mongo_client
+from shared.observability.logging import configure_logging
+from shared.presentation.middleware import install_correlation_middleware
 
 
 @asynccontextmanager
@@ -13,6 +15,7 @@ async def lifespan(app: FastAPI):
     """Create one MongoDB client for this API process and close it on shutdown."""
 
     settings = load_settings()
+    configure_logging(settings.app.log_level)
     app.state.settings = settings
     app.state.mongo_client = create_mongo_client(settings.mongodb)
     await ensure_ordering_indexes(
@@ -25,6 +28,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+install_correlation_middleware(app)
 app.include_router(orders_router)
 
 
