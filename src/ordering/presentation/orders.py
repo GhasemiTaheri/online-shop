@@ -2,8 +2,9 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header, Response, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Response, status
 
+from ordering.application.idempotency import IdempotencyConflictError
 from ordering.application.messagebus import MessageBus
 from ordering.domain.commands import (
     CreateOrder,
@@ -48,7 +49,10 @@ async def post_order(
         payment_method=request.payment_method,
         idempotency_key=idempotency_key,
     )
-    order = await messagebus.handle(command)
+    try:
+        order = await messagebus.handle(command)
+    except IdempotencyConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     response.headers["Location"] = f"/api/v1/orders/{order.id}"
     return _to_order_response(order)
 

@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from ordering.infrastructure.mongodb_indexes import ensure_ordering_indexes
 from ordering.presentation.orders import router as orders_router
 from settings import load_settings
 from shared.infrastructure.mongodb import create_mongo_client
@@ -14,6 +15,9 @@ async def lifespan(app: FastAPI):
     settings = load_settings()
     app.state.settings = settings
     app.state.mongo_client = create_mongo_client(settings.mongodb)
+    await ensure_ordering_indexes(
+        app.state.mongo_client, settings.mongodb.ordering_database
+    )
     try:
         yield
     finally:

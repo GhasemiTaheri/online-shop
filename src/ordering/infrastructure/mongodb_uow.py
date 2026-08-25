@@ -6,8 +6,11 @@ from typing import Self
 from pymongo import AsyncMongoClient
 from pymongo.asynchronous.client_session import AsyncClientSession
 
-from ordering.application.repository import OrderRepositoryAbs
+from ordering.application.repository import IdempotencyRepositoryAbs, OrderRepositoryAbs
 from ordering.application.uow import OrderingUowAbs
+from ordering.infrastructure.mongodb_idempotency_repository import (
+    MongoIdempotencyRepository,
+)
 from ordering.infrastructure.mongodb_repository import MongoOrderRepository
 
 
@@ -24,6 +27,9 @@ class OrderingMongoUow(OrderingUowAbs):
         database = client.get_database(database_name)
         self.orders: OrderRepositoryAbs = MongoOrderRepository(
             database.get_collection("orders"), self._active_session
+        )
+        self.idempotency: IdempotencyRepositoryAbs = MongoIdempotencyRepository(
+            database.get_collection("idempotency_keys"), self._active_session
         )
 
     async def __aenter__(self) -> Self:

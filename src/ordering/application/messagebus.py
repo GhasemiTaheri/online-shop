@@ -3,6 +3,7 @@
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+from pymongo.errors import DuplicateKeyError
 from ordering.application.uow import OrderingUowAbs
 from ordering.domain.commands import Command
 
@@ -28,5 +29,12 @@ class MessageBus:
                 f"No command handler is registered for {type(message).__name__}."
             ) from exc
 
-        async with self._uow:
-            return await handler(message)
+        for attempt in range(2):
+            try:
+                async with self._uow:
+                    return await handler(message)
+            except DuplicateKeyError:
+                if attempt == 1:
+                    raise
+
+        raise AssertionError("The duplicate-key retry loop must return or raise.")
