@@ -5,6 +5,7 @@ from uuid import uuid4
 import pytest
 
 from ordering.application.create_order import create_order
+from ordering.application.repository import OrderRepositoryAbs
 from ordering.application.uow import OrderingUowAbs
 from ordering.domain.commands import (
     CreateOrder,
@@ -14,9 +15,21 @@ from ordering.domain.commands import (
 from ordering.domain.order import Currency, OrderStatus
 
 
+class RecordingOrderRepository(OrderRepositoryAbs):
+    def __init__(self) -> None:
+        self.order = None
+
+    async def add(self, order) -> None:
+        self.order = order
+
+    async def get(self, order_id):
+        return None
+
+
 class RecordingUow(OrderingUowAbs):
     def __init__(self) -> None:
         self.committed = False
+        self.orders = RecordingOrderRepository()
 
     async def __aenter__(self) -> "RecordingUow":
         return self
@@ -65,4 +78,5 @@ async def test_create_order_handler_returns_a_pending_mock_order() -> None:
     assert item.unit_price.currency is Currency.EUR
     assert item.subtotal.currency is Currency.EUR
     assert order.total == item.subtotal
+    assert uow.orders.order is order
     assert uow.committed

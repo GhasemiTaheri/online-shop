@@ -37,11 +37,19 @@ class FakeClient:
         self.start_session_calls += 1
         return self.session
 
+    def get_database(self, name: str) -> "FakeDatabase":
+        return FakeDatabase()
+
+
+class FakeDatabase:
+    def get_collection(self, name: str) -> object:
+        return object()
+
 
 @pytest.mark.asyncio
 async def test_commit_commits_and_ends_the_session() -> None:
     session = FakeSession()
-    uow = OrderingMongoUow(cast(AsyncMongoClient, FakeClient(session)))
+    uow = OrderingMongoUow(cast(AsyncMongoClient, FakeClient(session)), "ordering")
 
     async with uow:
         await uow.commit()
@@ -55,7 +63,7 @@ async def test_commit_commits_and_ends_the_session() -> None:
 @pytest.mark.asyncio
 async def test_uncommitted_exit_aborts_and_ends_the_session() -> None:
     session = FakeSession()
-    uow = OrderingMongoUow(cast(AsyncMongoClient, FakeClient(session)))
+    uow = OrderingMongoUow(cast(AsyncMongoClient, FakeClient(session)), "ordering")
 
     async with uow:
         pass
@@ -69,7 +77,7 @@ async def test_uncommitted_exit_aborts_and_ends_the_session() -> None:
 @pytest.mark.asyncio
 async def test_exception_aborts_and_preserves_the_exception() -> None:
     session = FakeSession()
-    uow = OrderingMongoUow(cast(AsyncMongoClient, FakeClient(session)))
+    uow = OrderingMongoUow(cast(AsyncMongoClient, FakeClient(session)), "ordering")
 
     with pytest.raises(ValueError, match="failure"):
         async with uow:

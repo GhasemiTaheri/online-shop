@@ -50,5 +50,6 @@ async def create_order(command: CreateOrder, uow: OrderingUowAbs) -> Order:
         created_at=now,
         updated_at=now,
     )
+    await uow.orders.add(order)
     await uow.commit()
     return order

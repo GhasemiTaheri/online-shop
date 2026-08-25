@@ -15,7 +15,8 @@ def get_ordering_messagebus(request: Request) -> messagebus.MessageBus:
     """Build the request-scoped dispatcher using the process Mongo client."""
 
     client: AsyncMongoClient = request.app.state.mongo_client
-    uow = OrderingMongoUow(client)
+    database_name: str = request.app.state.settings.mongodb.ordering_database
+    uow = OrderingMongoUow(client, database_name)
     dependencies = {"uow": uow}
     injected_command_handlers = {
         command_type: inject_dependencies(handler, dependencies)

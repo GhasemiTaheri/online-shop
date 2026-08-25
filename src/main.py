@@ -12,6 +12,7 @@ async def lifespan(app: FastAPI):
     """Create one MongoDB client for this API process and close it on shutdown."""
 
     settings = load_settings()
+    app.state.settings = settings
     app.state.mongo_client = create_mongo_client(settings.mongodb)
     try:
         yield

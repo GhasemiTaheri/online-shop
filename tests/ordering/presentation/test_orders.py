@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from ordering.application.create_order import create_order
+from ordering.application.repository import OrderRepositoryAbs
 from ordering.application.uow import OrderingUowAbs
 from ordering.domain.commands import CreateOrder
 from ordering.domain.order import Order
@@ -11,7 +12,18 @@ from ordering.presentation.dependencies import get_ordering_messagebus
 from ordering.presentation.orders import router
 
 
+class NullOrderRepository(OrderRepositoryAbs):
+    async def add(self, order: Order) -> None:
+        return None
+
+    async def get(self, order_id):
+        return None
+
+
 class RecordingUow(OrderingUowAbs):
+    def __init__(self) -> None:
+        self.orders = NullOrderRepository()
+
     async def __aenter__(self) -> "RecordingUow":
         return self
 

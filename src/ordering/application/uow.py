@@ -4,9 +4,13 @@ from abc import ABC, abstractmethod
 from types import TracebackType
 from typing import Self
 
+from ordering.application.repository import OrderRepositoryAbs
+
 
 class OrderingUowAbs(ABC):
     """Defines the local transaction boundary for Ordering use cases."""
+
+    orders: OrderRepositoryAbs
 
     @abstractmethod
     async def __aenter__(self) -> Self:
