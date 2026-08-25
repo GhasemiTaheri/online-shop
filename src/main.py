@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from ordering.presentation.orders import router as orders_router
 from settings import load_settings
 from shared.infrastructure.mongodb import create_mongo_client
 
@@ -19,6 +20,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+app.include_router(orders_router)
 
 
 @app.get("/hello-world")
