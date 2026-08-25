@@ -24,6 +24,7 @@ from ordering.domain.order import (
     ProductId,
     ShippingAddress,
 )
+from ordering.exceptions import ApplicationException
 
 
 async def create_order(command: CreateOrder, uow: OrderingUowAbs) -> Order:
@@ -45,7 +46,9 @@ async def create_order(command: CreateOrder, uow: OrderingUowAbs) -> Order:
             )
         order = await uow.orders.get(existing.order_id)
         if order is None:
-            raise RuntimeError("The idempotency record references a missing order.")
+            raise ApplicationException(
+                "The idempotency record references a missing order."
+            )
         return order
 
     items = tuple(_mock_order_item(item.product_id, item.quantity) for item in command.items)

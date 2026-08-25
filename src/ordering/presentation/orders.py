@@ -2,9 +2,9 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Response, status
+from fastapi import APIRouter, Depends, Header, Response, status
+from fastapi.responses import JSONResponse
 
-from ordering.application.idempotency import IdempotencyConflictError
 from ordering.application.messagebus import MessageBus
 from ordering.domain.commands import (
     CreateOrder,
@@ -12,6 +12,7 @@ from ordering.domain.commands import (
     CreateOrderShippingAddress,
 )
 from ordering.domain.order import Money, Order, OrderItem
+from ordering.exceptions import OrderingException
 from ordering.presentation.dependencies import get_ordering_messagebus
 from ordering.presentation.schema.requests import CreateOrderRequest
 from ordering.presentation.schema.responses import (
@@ -29,7 +30,7 @@ async def post_order(
     response: Response,
     idempotency_key: Annotated[str, Header(alias="Idempotency-Key", min_length=1)],
     messagebus: Annotated[MessageBus, Depends(get_ordering_messagebus)],
-) -> OrderResponse:
+) -> OrderResponse | JSONResponse:
     """Create an order through the Ordering application command bus."""
 
     command = CreateOrder(
@@ -51,10 +52,20 @@ async def post_order(
     )
     try:
         order = await messagebus.handle(command)
-    except IdempotencyConflictError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except OrderingException as exc:
+        return _to_error_response(exc)
     response.headers["Location"] = f"/api/v1/orders/{order.id}"
     return _to_order_response(order)
+
+
+def _to_error_response(exc: OrderingException) -> JSONResponse:
+    """Map propagated Ordering failures to the public HTTP contract."""
+
+    message = str(exc) if exc.expose_message else "The service is temporarily unavailable."
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"error": {"code": exc.code, "message": message, "details": {}}},
+    )
 
 
 def _to_order_response(order: Order) -> OrderResponse:

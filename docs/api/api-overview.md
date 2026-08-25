@@ -20,15 +20,14 @@ Order creation returns the persisted order immediately; downstream inventory/pay
 
 After the Order and `OrderPlaced` Outbox record are durably persisted, order creation returns `201 Created`, includes `Location: /api/v1/orders/{order_id}`, and returns the current asynchronous workflow status. A replay with the same idempotency key and identical request returns the stored original response; a different request with the same active key returns `409 Conflict`.
 
-## Error shape (proposed)
+## Error shape
 
 ```json
 {
   "error": {
     "code": "ORDER_NOT_CANCELLABLE",
     "message": "The order cannot be cancelled in its current state.",
-    "details": {},
-    "correlation_id": "..."
+    "details": {}
   }
 }
 ```
@@ -36,6 +35,12 @@ After the Order and `OrderPlaced` Outbox record are durably persisted, order cre
 ## HTTP error mapping
 
 Every error uses the documented envelope and a stable machine-readable `code`.
+
+Expected failures are defined by their owning bounded context. For example,
+Ordering uses `OrderingException` with `DomainException`, `ConflictException`,
+`NotFoundException`, and `InfraException` subclasses. Each route catches the
+exceptions propagated by its use case and maps them to the documented response;
+the exceptions themselves do not depend on FastAPI.
 
 | Status | Use |
 |---:|---|

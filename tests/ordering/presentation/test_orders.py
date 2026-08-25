@@ -156,3 +156,10 @@ def test_post_order_returns_conflict_for_a_different_replay() -> None:
 
     assert first.status_code == 201
     assert replay.status_code == 409
+    assert replay.json() == {
+        "error": {
+            "code": "ORDERING_CONFLICT",
+            "message": "Idempotency-Key has already been used for a different order request.",
+            "details": {},
+        }
+    }

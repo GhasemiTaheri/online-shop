@@ -4,12 +4,13 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from ordering.domain.order import CustomerId, OrderId
+from ordering.exceptions import ConflictException
 
 
 ORDER_CREATE_ROUTE = "POST:/api/v1/orders"
 
 
-class IdempotencyConflictError(Exception):
+class IdempotencyConflictError(ConflictException):
     """Raised when a key is replayed with a different request payload."""
 
 
