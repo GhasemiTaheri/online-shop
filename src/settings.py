@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 from dotenv import load_dotenv
 from pydantic import Field
@@ -26,6 +27,7 @@ class AppSettings(BaseSettings):
     debug: bool
     host: str
     port: int = Field(ge=1, le=65_535)
+    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
 
 
 class MongoDBSettings(BaseSettings):

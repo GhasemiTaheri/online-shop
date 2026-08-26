@@ -16,6 +16,10 @@
 - Use type annotations, async only for I/O boundaries, timezone-aware UTC timestamps, and `Decimal` for money.
 - Prefer immutable value objects and explicit domain exceptions.
 - Do not expose raw database IDs, driver exceptions, stack traces, or secrets.
+- Use named standard-library loggers and structured `extra` fields only at
+  presentation, application, and infrastructure boundaries. Logs are JSON on
+  stdout and may include only the documented observability fields; never log
+  request bodies, payment tokens, credentials, or secrets.
 - Keep commands imperative, events past tense, and query DTOs separate from aggregates.
 
 ## Tooling target
