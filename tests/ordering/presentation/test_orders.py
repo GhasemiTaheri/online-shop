@@ -4,12 +4,11 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from ordering.application.create_order import create_order
-from ordering.application.idempotency import IdempotencyRecord
-from ordering.application.repository import IdempotencyRepositoryAbs
-from ordering.application.repository import OrderRepositoryAbs
 from ordering.application.uow import OrderingUowAbs
 from ordering.domain.commands import CreateOrder
+from ordering.domain.idempotency import IdempotencyRecord
 from ordering.domain.order import Order
+from ordering.domain.repository import IdempotencyRepositoryAbs, OrderRepositoryAbs
 from ordering.presentation.dependencies import get_ordering_messagebus
 from ordering.presentation.orders import router
 from shared.presentation.middleware import install_correlation_middleware

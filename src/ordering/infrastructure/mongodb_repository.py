@@ -5,7 +5,7 @@ from collections.abc import Callable
 from pymongo.asynchronous.client_session import AsyncClientSession
 from pymongo.asynchronous.collection import AsyncCollection
 
-from ordering.application.repository import OrderRepositoryAbs
+from ordering.domain.repository import OrderRepositoryAbs
 from ordering.domain.order import Order, OrderId
 from ordering.infrastructure.mongodb_mapper import order_from_document, order_to_document
 

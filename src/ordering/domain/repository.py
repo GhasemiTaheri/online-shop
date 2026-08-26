@@ -1,14 +1,14 @@
-"""Repository interfaces owned by the Ordering application layer."""
+"""Repository contracts owned by the Ordering domain."""
 
 from abc import ABC, abstractmethod
+from datetime import datetime
 
-from ordering.domain.order import Order, OrderId
-from ordering.application.idempotency import IdempotencyRecord
-from ordering.domain.order import CustomerId
+from ordering.domain.idempotency import IdempotencyRecord
+from ordering.domain.order import CustomerId, Order, OrderId
 
 
 class OrderRepositoryAbs(ABC):
-    """Persistence operations required by Ordering use cases."""
+    """Persistence operations required by the Order aggregate."""
 
     @abstractmethod
     async def add(self, order: Order) -> None:
@@ -20,17 +20,17 @@ class OrderRepositoryAbs(ABC):
 
 
 class IdempotencyRepositoryAbs(ABC):
-    """Durable idempotency state used by Ordering commands."""
+    """Durable idempotency state owned by the Ordering context."""
 
     @abstractmethod
     async def deactivate_expired(
-        self, customer_id: CustomerId, route: str, key: str, now
+        self, customer_id: CustomerId, route: str, key: str, now: datetime
     ) -> None:
         """Mark expired records inactive while retaining their audit history."""
 
     @abstractmethod
     async def get_active(
-        self, customer_id: CustomerId, route: str, key: str, now
+        self, customer_id: CustomerId, route: str, key: str, now: datetime
     ) -> IdempotencyRecord | None:
         """Return the current active record for a scoped idempotency key."""
 

@@ -7,9 +7,9 @@ from uuid import UUID
 from pymongo.asynchronous.client_session import AsyncClientSession
 from pymongo.asynchronous.collection import AsyncCollection
 
-from ordering.application.idempotency import IdempotencyRecord
-from ordering.application.repository import IdempotencyRepositoryAbs
+from ordering.domain.idempotency import IdempotencyRecord
 from ordering.domain.order import CustomerId, OrderId
+from ordering.domain.repository import IdempotencyRepositoryAbs
 
 
 class MongoIdempotencyRepository(IdempotencyRepositoryAbs):

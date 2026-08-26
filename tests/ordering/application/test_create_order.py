@@ -6,9 +6,7 @@ import pytest
 from pymongo.errors import DuplicateKeyError
 
 from ordering.application.create_order import create_order
-from ordering.application.idempotency import IdempotencyConflictError, IdempotencyRecord
-from ordering.application.repository import IdempotencyRepositoryAbs
-from ordering.application.repository import OrderRepositoryAbs
+from ordering.application.idempotency import IdempotencyConflictError
 from ordering.application.uow import OrderingUowAbs
 from ordering.application.messagebus import MessageBus
 from ordering.domain.commands import (
@@ -16,7 +14,9 @@ from ordering.domain.commands import (
     CreateOrderItem,
     CreateOrderShippingAddress,
 )
+from ordering.domain.idempotency import IdempotencyRecord
 from ordering.domain.order import Currency, OrderStatus
+from ordering.domain.repository import IdempotencyRepositoryAbs, OrderRepositoryAbs
 
 
 class RecordingOrderRepository(OrderRepositoryAbs):

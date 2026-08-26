@@ -7,7 +7,7 @@ import logging
 from pymongo import AsyncMongoClient
 from pymongo.asynchronous.client_session import AsyncClientSession
 
-from ordering.application.repository import IdempotencyRepositoryAbs, OrderRepositoryAbs
+from ordering.domain.repository import IdempotencyRepositoryAbs, OrderRepositoryAbs
 from ordering.application.uow import OrderingUowAbs
 from ordering.infrastructure.mongodb_idempotency_repository import (
     MongoIdempotencyRepository,

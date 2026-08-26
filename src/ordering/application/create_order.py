@@ -10,10 +10,10 @@ from uuid import uuid4
 from ordering.application.idempotency import (
     ORDER_CREATE_ROUTE,
     IdempotencyConflictError,
-    IdempotencyRecord,
 )
 from ordering.application.uow import OrderingUowAbs
 from ordering.domain.commands import CreateOrder
+from ordering.domain.idempotency import IdempotencyRecord
 from ordering.domain.order import (
     Currency,
     CustomerId,

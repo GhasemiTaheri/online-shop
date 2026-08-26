@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from types import TracebackType
 from typing import Self
 
-from ordering.application.repository import IdempotencyRepositoryAbs, OrderRepositoryAbs
+from ordering.domain.repository import IdempotencyRepositoryAbs, OrderRepositoryAbs
 
 
 class OrderingUowAbs(ABC):
