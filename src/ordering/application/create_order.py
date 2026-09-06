@@ -13,6 +13,7 @@ from ordering.application.idempotency import (
     IdempotencyKeyAlreadyExistsError,
 )
 from ordering.application.uow import OrderingUowAbs
+from ordering.application.product_snapshots import ProductSnapshotProvider
 from ordering.domain.commands import CreateOrder
 from ordering.domain.idempotency import IdempotencyRecord
 from ordering.domain.order import (
@@ -26,17 +27,23 @@ from ordering.domain.order import (
     ProductId,
     ShippingAddress,
 )
-from ordering.exceptions import ApplicationException
+from ordering.exceptions import ApplicationException, DomainException, NotFoundException
 
 logger = logging.getLogger(__name__)
 
 
-async def create_order(command: CreateOrder, uow: OrderingUowAbs) -> Order:
+async def create_order(
+    command: CreateOrder, uow: OrderingUowAbs, product_snapshots: ProductSnapshotProvider
+) -> Order:
     """Persist a user-supplied order with replay-safe idempotency."""
 
     now = datetime.now(UTC)
     customer_id = CustomerId(command.customer_id)
     fingerprint = _request_fingerprint(command)
+    snapshots = await product_snapshots.get_many(
+        tuple(dict.fromkeys(item.product_id for item in command.items))
+    )
+    _validate_product_snapshots(command, snapshots)
     for attempt in range(2):
         try:
             async with uow:
@@ -67,10 +74,7 @@ async def create_order(command: CreateOrder, uow: OrderingUowAbs) -> Order:
                     )
                     return order
 
-                items = tuple(
-                    _mock_order_item(item.product_id, item.quantity)
-                    for item in command.items
-                )
+                items = tuple(_order_item_from_snapshot(item.product_id, item.quantity, snapshots[item.product_id]) for item in command.items)
                 total = Money(
                     amount=sum((item.subtotal.amount for item in items), Decimal("0")),
                     currency=Currency.EUR,
@@ -132,13 +136,22 @@ async def create_order(command: CreateOrder, uow: OrderingUowAbs) -> Order:
     raise AssertionError("The duplicate-key retry loop must return or raise.")
 
 
-def _mock_order_item(product_id, quantity: int) -> OrderItem:
-    """Create a temporary Catalog snapshot until the Catalog context is available."""
+def _validate_product_snapshots(command: CreateOrder, snapshots: dict) -> None:
+    for item in command.items:
+        snapshot = snapshots.get(item.product_id)
+        if snapshot is None:
+            raise NotFoundException(f"Product {item.product_id} was not found.")
+        if not snapshot.active:
+            raise DomainException(f"Product {item.product_id} is inactive.")
 
-    unit_price = Money(amount=Decimal("29.99"), currency=Currency.EUR)
+
+def _order_item_from_snapshot(product_id, quantity: int, snapshot) -> OrderItem:
+    """Capture an immutable Catalog product snapshot in an order line."""
+
+    unit_price = Money(amount=snapshot.unit_price, currency=Currency(snapshot.currency))
     return OrderItem(
         product_id=ProductId(product_id),
-        product_name=f"Mock Product {str(product_id)[:8]}",
+        product_name=snapshot.name,
         unit_price=unit_price,
         quantity=quantity,
         subtotal=Money(

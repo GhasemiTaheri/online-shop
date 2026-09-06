@@ -10,6 +10,7 @@ from ordering.application.idempotency import (
     IdempotencyKeyAlreadyExistsError,
 )
 from ordering.application.uow import OrderingUowAbs
+from ordering.application.product_snapshots import ProductSnapshot
 from ordering.domain.commands import (
     CreateOrder,
     CreateOrderItem,
@@ -101,6 +102,17 @@ class RecordingUow(OrderingUowAbs):
         return None
 
 
+class RecordingProductSnapshots:
+    async def get_many(self, product_ids):
+        return {
+            product_id: ProductSnapshot(product_id, f"Product {str(product_id)[:8]}", Decimal("29.99"), "EUR", True)
+            for product_id in product_ids
+        }
+
+
+SNAPSHOTS = RecordingProductSnapshots()
+
+
 @pytest.mark.asyncio
 async def test_create_order_handler_returns_a_pending_mock_order() -> None:
     command = CreateOrder(
@@ -119,7 +131,7 @@ async def test_create_order_handler_returns_a_pending_mock_order() -> None:
     )
 
     uow = RecordingUow()
-    order = await create_order(command, uow)
+    order = await create_order(command, uow, SNAPSHOTS)
 
     assert order.status is OrderStatus.PENDING
     assert order.version == 1
@@ -128,7 +140,7 @@ async def test_create_order_handler_returns_a_pending_mock_order() -> None:
     assert order.created_at.tzinfo is UTC
 
     item = order.items[0]
-    assert item.product_name == f"Mock Product {str(command.items[0].product_id)[:8]}"
+    assert item.product_name == f"Product {str(command.items[0].product_id)[:8]}"
     assert item.quantity == 1
     assert item.unit_price.amount == Decimal("29.99")
     assert item.subtotal.amount == Decimal("29.99")
@@ -162,8 +174,8 @@ async def test_create_order_replays_the_original_order_for_an_identical_key() ->
     )
     uow = RecordingUow()
 
-    created = await create_order(command, uow)
-    replayed = await create_order(command, uow)
+    created = await create_order(command, uow, SNAPSHOTS)
+    replayed = await create_order(command, uow, SNAPSHOTS)
 
     assert replayed is created
     assert len(uow.orders.orders) == 1
@@ -185,11 +197,11 @@ async def test_create_order_rejects_a_different_request_for_an_active_key() -> N
         idempotency_key="same-key",
     )
     uow = RecordingUow()
-    await create_order(command, uow)
+    await create_order(command, uow, SNAPSHOTS)
 
     with pytest.raises(IdempotencyConflictError, match="different order request"):
         await create_order(
-            command.model_copy(update={"payment_method": "different-token"}), uow
+            command.model_copy(update={"payment_method": "different-token"}), uow, SNAPSHOTS
         )
 
 
@@ -211,7 +223,7 @@ async def test_concurrent_same_key_retries_after_a_duplicate_idempotency_insert(
     uow = RecordingUow()
     uow.idempotency = DuplicateOnceIdempotencyRepository()
 
-    order = await create_order(command, uow)
+    order = await create_order(command, uow, SNAPSHOTS)
 
     assert uow.idempotency.duplicate_raised
     assert len(uow.orders.orders) == 1
@@ -239,7 +251,7 @@ async def test_unrelated_duplicate_key_errors_are_not_retried() -> None:
     uow.orders = DuplicateOrderRepository()
 
     with pytest.raises(DuplicateKeyError, match="duplicate order document"):
-        await create_order(command, uow)
+        await create_order(command, uow, SNAPSHOTS)
 
     assert uow.entered_count == 1
     assert uow.exited_count == 1

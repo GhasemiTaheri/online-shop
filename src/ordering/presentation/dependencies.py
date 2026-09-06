@@ -17,7 +17,7 @@ def get_ordering_messagebus(request: Request) -> messagebus.MessageBus:
     client: AsyncMongoClient = request.app.state.mongo_client
     database_name: str = request.app.state.settings.mongodb.ordering_database
     uow = OrderingMongoUow(client, database_name)
-    dependencies = {"uow": uow}
+    dependencies = {"uow": uow, "product_snapshots": request.app.state.ordering_product_snapshots}
     injected_command_handlers = {
         command_type: inject_dependencies(handler, dependencies)
         for command_type, handler in COMMAND_HANDLERS.items()
