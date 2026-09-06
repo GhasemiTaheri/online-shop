@@ -1,4 +1,4 @@
-"""Ordering read use cases and opaque cursor encoding."""
+"""Ordering read-side application views and cursor encoding."""
 
 import base64
 import binascii
@@ -13,7 +13,9 @@ from ordering.exceptions import InvalidCursorError, NotFoundException
 
 def encode_cursor(order: Order) -> str:
     payload = {"created_at": order.created_at.isoformat(), "id": str(order.id)}
-    return base64.urlsafe_b64encode(json.dumps(payload, separators=(",", ":")).encode()).decode().rstrip("=")
+    return base64.urlsafe_b64encode(
+        json.dumps(payload, separators=(",", ":")).encode()
+    ).decode().rstrip("=")
 
 
 def decode_cursor(value: str) -> tuple[datetime, UUID]:
@@ -32,13 +34,19 @@ async def get_order(order_id: UUID, repository: OrderRepositoryAbs) -> Order:
     return order
 
 
-async def list_orders(customer_id: UUID, limit: int, cursor: str | None,
-                      repository: OrderRepositoryAbs) -> tuple[list[Order], str | None]:
+async def list_orders(
+    customer_id: UUID,
+    limit: int,
+    cursor: str | None,
+    repository: OrderRepositoryAbs,
+) -> tuple[list[Order], str | None]:
     try:
         boundary = decode_cursor(cursor) if cursor else None
     except ValueError as exc:
         raise InvalidCursorError(str(exc)) from exc
-    orders = await repository.list_for_customer(CustomerId(customer_id), limit + 1, boundary)
+    orders = await repository.list_for_customer(
+        CustomerId(customer_id), limit + 1, boundary
+    )
     has_next = len(orders) > limit
     page = orders[:limit]
     return page, encode_cursor(page[-1]) if has_next and page else None

@@ -17,7 +17,7 @@ from ordering.domain.order import Money, Order, OrderItem
 from ordering.exceptions import OrderingException
 from ordering.presentation.dependencies import get_ordering_messagebus
 from ordering.presentation.dependencies import get_order_repository
-from ordering.application.list_orders import get_order, list_orders
+from ordering.application.views import get_order, list_orders
 from ordering.presentation.schema.requests import CreateOrderRequest
 from ordering.presentation.schema.responses import (
     MoneyResponse,
