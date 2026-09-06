@@ -1,10 +1,12 @@
 from uuid import uuid4
+from decimal import Decimal
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from ordering.application.create_order import create_order
 from ordering.application.uow import OrderingUowAbs
+from ordering.application.product_snapshots import ProductSnapshot
 from ordering.domain.commands import CreateOrder
 from ordering.domain.idempotency import IdempotencyRecord
 from ordering.domain.order import Order
@@ -64,7 +66,22 @@ class RecordingMessageBus:
 
     async def handle(self, command: CreateOrder) -> Order:
         self.command = command
-        return await create_order(command, self.uow)
+        snapshots = {
+            item.product_id: ProductSnapshot(
+                item.product_id, f"Product {str(item.product_id)[:8]}",
+                Decimal("29.99"), "EUR", True
+            )
+            for item in command.items
+        }
+        return await create_order(command, self.uow, StaticProductSnapshots(snapshots))
+
+
+class StaticProductSnapshots:
+    def __init__(self, snapshots) -> None:
+        self._snapshots = snapshots
+
+    async def get_many(self, product_ids):
+        return {product_id: self._snapshots[product_id] for product_id in product_ids}
 
 
 def _app_with_bus(messagebus: RecordingMessageBus) -> FastAPI:
@@ -102,7 +119,7 @@ def test_post_order_dispatches_a_complete_command_and_returns_created_order() ->
     assert response.status_code == 201
     body = response.json()
     assert body["status"] == "PENDING"
-    assert body["items"][0]["product_name"].startswith("Mock Product ")
+    assert body["items"][0]["product_name"].startswith("Product ")
     assert body["total"] == {"amount": "59.98", "currency": "EUR"}
     assert "payment_method" not in body
     assert response.headers["location"] == f"/api/v1/orders/{body['id']}"

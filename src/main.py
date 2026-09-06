@@ -2,6 +2,9 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from catalog.application.product_snapshots import CatalogProductSnapshotReader
+from catalog.infrastructure.mongodb_indexes import ensure_catalog_indexes
+from catalog.infrastructure.mongodb_repository import MongoProductRepository
 from ordering.infrastructure.mongodb_indexes import ensure_ordering_indexes
 from ordering.presentation.orders import router as orders_router
 from settings import load_settings
@@ -18,6 +21,11 @@ async def lifespan(app: FastAPI):
     configure_logging(settings.app.log_level)
     app.state.settings = settings
     app.state.mongo_client = create_mongo_client(settings.mongodb)
+    catalog_database = app.state.mongo_client.get_database(settings.mongodb.catalog_database)
+    app.state.ordering_product_snapshots = CatalogProductSnapshotReader(
+        MongoProductRepository(catalog_database.get_collection("products"))
+    )
+    await ensure_catalog_indexes(app.state.mongo_client, settings.mongodb.catalog_database)
     await ensure_ordering_indexes(
         app.state.mongo_client, settings.mongodb.ordering_database
     )
