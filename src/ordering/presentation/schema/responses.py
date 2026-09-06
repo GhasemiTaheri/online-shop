@@ -27,3 +27,8 @@ class OrderResponse(BaseModel):
     status: str
     created_at: datetime
     updated_at: datetime
+
+
+class OrderListResponse(BaseModel):
+    items: list[OrderResponse]
+    next_cursor: str | None

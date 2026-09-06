@@ -1,10 +1,13 @@
 """MongoDB repository implementation for Ordering."""
 
 from pymongo.asynchronous.client_session import AsyncClientSession
+from datetime import datetime
+from uuid import UUID
+from pymongo import DESCENDING
 from pymongo.asynchronous.collection import AsyncCollection
 
 from ordering.domain.repository import OrderRepositoryAbs
-from ordering.domain.order import Order, OrderId
+from ordering.domain.order import CustomerId, Order, OrderId
 from ordering.infrastructure.mongodb_mapper import order_from_document, order_to_document
 
 
@@ -29,3 +32,17 @@ class MongoOrderRepository(OrderRepositoryAbs):
             {"_id": str(order_id)}, session=self._session_provider
         )
         return None if document is None else order_from_document(document)
+
+    async def list_for_customer(self, customer_id: CustomerId, limit: int,
+                                cursor: tuple[datetime, UUID] | None = None) -> list[Order]:
+        query: dict = {"customer_id": str(customer_id)}
+        if cursor is not None:
+            created_at, order_id = cursor
+            query["$or"] = [
+                {"created_at": {"$lt": created_at}},
+                {"created_at": created_at, "_id": {"$lt": str(order_id)}},
+            ]
+        cursor_result = self._collection.find(query).sort(
+            [("created_at", DESCENDING), ("_id", DESCENDING)]
+        ).limit(limit)
+        return [order_from_document(document) async for document in cursor_result]

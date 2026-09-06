@@ -2,6 +2,7 @@
 
 from abc import ABC, abstractmethod
 from datetime import datetime
+from uuid import UUID
 
 from ordering.domain.idempotency import IdempotencyRecord
 from ordering.domain.order import CustomerId, Order, OrderId
@@ -17,6 +18,12 @@ class OrderRepositoryAbs(ABC):
     @abstractmethod
     async def get(self, order_id: OrderId) -> Order | None:
         """Return an order by ID, or ``None`` when it does not exist."""
+
+    async def list_for_customer(
+        self, customer_id: CustomerId, limit: int, cursor: tuple[datetime, UUID] | None = None
+    ) -> list[Order]:
+        """Return newest orders after the supplied cursor boundary."""
+        raise NotImplementedError
 
 
 class IdempotencyRepositoryAbs(ABC):

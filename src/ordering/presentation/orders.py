@@ -2,8 +2,9 @@
 
 from typing import Annotated
 import logging
+from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, Response, status
+from fastapi import APIRouter, Depends, Header, Query, Request, Response, status
 from fastapi.responses import JSONResponse
 
 from ordering.application.messagebus import MessageBus
@@ -15,15 +16,40 @@ from ordering.domain.commands import (
 from ordering.domain.order import Money, Order, OrderItem
 from ordering.exceptions import OrderingException
 from ordering.presentation.dependencies import get_ordering_messagebus
+from ordering.presentation.dependencies import get_order_repository
+from ordering.application.views import get_order, list_orders
 from ordering.presentation.schema.requests import CreateOrderRequest
 from ordering.presentation.schema.responses import (
     MoneyResponse,
     OrderItemResponse,
     OrderResponse,
+    OrderListResponse,
 )
 
 router = APIRouter(prefix="/api/v1/orders", tags=["orders"])
 logger = logging.getLogger(__name__)
+
+
+@router.get("/{order_id}", response_model=OrderResponse)
+async def get_order_endpoint(order_id: UUID, repository=Depends(get_order_repository)) -> OrderResponse | JSONResponse:
+    try:
+        return _to_order_response(await get_order(order_id, repository))
+    except OrderingException as exc:
+        return _to_error_response(exc)
+
+
+@router.get("", response_model=OrderListResponse)
+async def list_order_endpoint(
+    customer_id: UUID,
+    cursor: str | None = None,
+    limit: int = Query(default=20, ge=1, le=100),
+    repository=Depends(get_order_repository),
+) -> OrderListResponse | JSONResponse:
+    try:
+        orders, next_cursor = await list_orders(customer_id, limit, cursor, repository)
+        return OrderListResponse(items=[_to_order_response(order) for order in orders], next_cursor=next_cursor)
+    except OrderingException as exc:
+        return _to_error_response(exc)
 
 
 @router.post("", response_model=OrderResponse, status_code=status.HTTP_201_CREATED)
