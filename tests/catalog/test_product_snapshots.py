@@ -5,7 +5,8 @@ from uuid import uuid4
 import pytest
 
 from catalog.application.product_snapshots import CatalogProductSnapshotReader
-from catalog.application.create_product import CreateProduct, create_product
+from catalog.application.create_product import create_product
+from catalog.domain.commands import CreateProduct
 from catalog.domain.product import Currency, Money, Product, ProductId
 from catalog.domain.repository import ProductRepositoryAbs
 
