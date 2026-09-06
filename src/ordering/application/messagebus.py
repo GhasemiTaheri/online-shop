@@ -1,9 +1,12 @@
 """Application message dispatch."""
 
 from collections.abc import Awaitable, Callable
+import logging
 from typing import Any
 
 from ordering.domain.commands import Command
+
+logger = logging.getLogger(__name__)
 
 
 class MessageBus:
