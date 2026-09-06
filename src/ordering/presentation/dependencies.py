@@ -9,6 +9,13 @@ from pymongo import AsyncMongoClient
 from ordering.application import COMMAND_HANDLERS, messagebus
 
 from ordering.infrastructure.mongodb_uow import OrderingMongoUow
+from ordering.infrastructure.mongodb_repository import MongoOrderRepository
+
+
+def get_order_repository(request: Request) -> MongoOrderRepository:
+    client: AsyncMongoClient = request.app.state.mongo_client
+    database_name: str = request.app.state.settings.mongodb.ordering_database
+    return MongoOrderRepository(client.get_database(database_name).get_collection("orders"))
 
 
 def get_ordering_messagebus(request: Request) -> messagebus.MessageBus:

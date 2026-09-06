@@ -46,3 +46,9 @@ class InfraException(OrderingException):
 
     code = "ORDERING_INFRASTRUCTURE_UNAVAILABLE"
     status_code = 503
+
+
+class InvalidCursorError(OrderingException):
+    code = "ORDERING_INVALID_CURSOR"
+    status_code = 400
+    expose_message = True

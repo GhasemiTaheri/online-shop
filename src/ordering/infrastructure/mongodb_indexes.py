@@ -8,7 +8,7 @@ async def ensure_ordering_indexes(client: AsyncMongoClient, database_name: str) 
 
     database = client.get_database(database_name)
     await database.get_collection("orders").create_index(
-        [("customer_id", ASCENDING), ("created_at", DESCENDING)]
+        [("customer_id", ASCENDING), ("created_at", DESCENDING), ("_id", DESCENDING)]
     )
     await database.get_collection("idempotency_keys").create_index(
         [("customer_id", ASCENDING), ("route", ASCENDING), ("key", ASCENDING)],
