@@ -1,12 +1,13 @@
 """MongoDB-backed idempotency records for Ordering."""
 
-from collections.abc import Callable
 from datetime import datetime
 from uuid import UUID
 
 from pymongo.asynchronous.client_session import AsyncClientSession
 from pymongo.asynchronous.collection import AsyncCollection
+from pymongo.errors import DuplicateKeyError
 
+from ordering.application.idempotency import IdempotencyKeyAlreadyExistsError
 from ordering.domain.idempotency import IdempotencyRecord
 from ordering.domain.order import CustomerId, OrderId
 from ordering.domain.repository import IdempotencyRepositoryAbs
@@ -18,10 +19,10 @@ class MongoIdempotencyRepository(IdempotencyRepositoryAbs):
     def __init__(
         self,
         collection: AsyncCollection,
-        session_provider: Callable[[], AsyncClientSession],
+        session: AsyncClientSession | None = None,
     ) -> None:
         self._collection = collection
-        self._session_provider = session_provider
+        self._session_provider = session
 
     async def deactivate_expired(
         self, customer_id: CustomerId, route: str, key: str, now: datetime
@@ -35,7 +36,7 @@ class MongoIdempotencyRepository(IdempotencyRepositoryAbs):
                 "expires_at": {"$lte": now},
             },
             {"$set": {"active": False}},
-            session=self._session_provider(),
+            session=self._session_provider,
         )
 
     async def get_active(
@@ -49,23 +50,26 @@ class MongoIdempotencyRepository(IdempotencyRepositoryAbs):
                 "active": True,
                 "expires_at": {"$gt": now},
             },
-            session=self._session_provider(),
+            session=self._session_provider,
         )
         return None if document is None else _from_document(document)
 
     async def add(self, record: IdempotencyRecord) -> None:
-        await self._collection.insert_one(
-            {
-                "customer_id": str(record.customer_id),
-                "route": record.route,
-                "key": record.key,
-                "request_fingerprint": record.request_fingerprint,
-                "order_id": str(record.order_id),
-                "expires_at": record.expires_at,
-                "active": record.active,
-            },
-            session=self._session_provider(),
-        )
+        try:
+            await self._collection.insert_one(
+                {
+                    "customer_id": str(record.customer_id),
+                    "route": record.route,
+                    "key": record.key,
+                    "request_fingerprint": record.request_fingerprint,
+                    "order_id": str(record.order_id),
+                    "expires_at": record.expires_at,
+                    "active": record.active,
+                },
+                session=self._session_provider,
+            )
+        except DuplicateKeyError as exc:
+            raise IdempotencyKeyAlreadyExistsError from exc
 
 
 def _from_document(document: dict) -> IdempotencyRecord:

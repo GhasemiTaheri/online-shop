@@ -27,12 +27,13 @@ class OrderingMongoUow(OrderingUowAbs):
         self._client = client
         self._session: AsyncClientSession | None = None
         self._finished = False
-        database = client.get_database(database_name)
+        self.database = client.get_database(database_name)
+
         self.orders: OrderRepositoryAbs = MongoOrderRepository(
-            database.get_collection("orders"), self._active_session
+            self.database.get_collection("orders")
         )
         self.idempotency: IdempotencyRepositoryAbs = MongoIdempotencyRepository(
-            database.get_collection("idempotency_keys"), self._active_session
+            self.database.get_collection("idempotency_keys")
         )
 
     async def __aenter__(self) -> Self:
@@ -42,6 +43,12 @@ class OrderingMongoUow(OrderingUowAbs):
         session = await self._client.start_session()
         try:
             session.start_transaction()
+            self.orders: OrderRepositoryAbs = MongoOrderRepository(
+                self.database.get_collection("orders"), session=session
+            )
+            self.idempotency: IdempotencyRepositoryAbs = MongoIdempotencyRepository(
+                self.database.get_collection("idempotency_keys"), session=session
+            )
         except BaseException:
             await session.end_session()
             raise
@@ -69,6 +76,12 @@ class OrderingMongoUow(OrderingUowAbs):
         finally:
             await self._session.end_session()
             self._session = None
+            self.orders: OrderRepositoryAbs = MongoOrderRepository(
+                self.database.get_collection("orders")
+            )
+            self.idempotency: IdempotencyRepositoryAbs = MongoIdempotencyRepository(
+                self.database.get_collection("idempotency_keys")
+            )
 
     async def commit(self) -> None:
         session = self._active_session()

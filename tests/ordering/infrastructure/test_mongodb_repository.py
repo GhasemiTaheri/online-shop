@@ -3,7 +3,10 @@ from decimal import Decimal
 from uuid import uuid4
 
 import pytest
+from pymongo.errors import DuplicateKeyError
 
+from ordering.application.idempotency import IdempotencyKeyAlreadyExistsError
+from ordering.domain.idempotency import IdempotencyRecord
 from ordering.domain.order import (
     Currency,
     CustomerId,
@@ -16,6 +19,9 @@ from ordering.domain.order import (
     ShippingAddress,
 )
 from ordering.infrastructure.mongodb_mapper import order_from_document, order_to_document
+from ordering.infrastructure.mongodb_idempotency_repository import (
+    MongoIdempotencyRepository,
+)
 from ordering.infrastructure.mongodb_repository import MongoOrderRepository
 
 
@@ -35,6 +41,11 @@ class FakeCollection:
         self.find_filter = filter
         self.find_session = session
         return self.document
+
+
+class DuplicateIdempotencyCollection:
+    async def insert_one(self, document, session) -> None:
+        raise DuplicateKeyError("active key already exists")
 
 
 def _order() -> Order:
@@ -88,7 +99,7 @@ def test_order_mapper_round_trips_the_persisted_fields() -> None:
 async def test_repository_uses_the_uow_session_for_writes_and_reads() -> None:
     collection = FakeCollection()
     session = object()
-    repository = MongoOrderRepository(collection, lambda: session)
+    repository = MongoOrderRepository(collection, session)
     order = _order()
 
     await repository.add(order)
@@ -101,3 +112,20 @@ async def test_repository_uses_the_uow_session_for_writes_and_reads() -> None:
     assert collection.find_session is session
     assert restored is not None
     assert restored.id == order.id
+
+
+@pytest.mark.asyncio
+async def test_idempotency_repository_translates_duplicate_key_races() -> None:
+    order = _order()
+    repository = MongoIdempotencyRepository(DuplicateIdempotencyCollection())
+    record = IdempotencyRecord(
+        customer_id=order.customer_id,
+        route="POST:/api/v1/orders",
+        key="same-key",
+        request_fingerprint="fingerprint",
+        order_id=order.id,
+        expires_at=datetime.now(UTC),
+    )
+
+    with pytest.raises(IdempotencyKeyAlreadyExistsError):
+        await repository.add(record)

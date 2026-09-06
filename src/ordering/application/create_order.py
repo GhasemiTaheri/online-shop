@@ -10,6 +10,7 @@ from uuid import uuid4
 from ordering.application.idempotency import (
     ORDER_CREATE_ROUTE,
     IdempotencyConflictError,
+    IdempotencyKeyAlreadyExistsError,
 )
 from ordering.application.uow import OrderingUowAbs
 from ordering.domain.commands import CreateOrder
@@ -36,24 +37,89 @@ async def create_order(command: CreateOrder, uow: OrderingUowAbs) -> Order:
     now = datetime.now(UTC)
     customer_id = CustomerId(command.customer_id)
     fingerprint = _request_fingerprint(command)
-    await uow.idempotency.deactivate_expired(
-        customer_id, ORDER_CREATE_ROUTE, command.idempotency_key, now
-    )
-    existing = await uow.idempotency.get_active(
-        customer_id, ORDER_CREATE_ROUTE, command.idempotency_key, now
-    )
-    if existing is not None:
-        if existing.request_fingerprint != fingerprint:
-            raise IdempotencyConflictError(
-                "Idempotency-Key has already been used for a different order request."
+    for attempt in range(2):
+        try:
+            async with uow:
+                await uow.idempotency.deactivate_expired(
+                    customer_id, ORDER_CREATE_ROUTE, command.idempotency_key, now
+                )
+                existing = await uow.idempotency.get_active(
+                    customer_id, ORDER_CREATE_ROUTE, command.idempotency_key, now
+                )
+                if existing is not None:
+                    if existing.request_fingerprint != fingerprint:
+                        raise IdempotencyConflictError(
+                            "Idempotency-Key has already been used for a different order request."
+                        )
+                    order = await uow.orders.get(existing.order_id)
+                    if order is None:
+                        raise ApplicationException(
+                            "The idempotency record references a missing order."
+                        )
+                    logger.info(
+                        "ordering.order_creation_replayed",
+                        extra={
+                            "context": "ordering",
+                            "operation": "create_order",
+                            "aggregate_type": "order",
+                            "aggregate_id": str(order.id),
+                        },
+                    )
+                    return order
+
+                items = tuple(
+                    _mock_order_item(item.product_id, item.quantity)
+                    for item in command.items
+                )
+                total = Money(
+                    amount=sum((item.subtotal.amount for item in items), Decimal("0")),
+                    currency=Currency.EUR,
+                )
+                order = Order(
+                    id=OrderId(uuid4()),
+                    customer_id=customer_id,
+                    items=items,
+                    shipping_address=ShippingAddress(
+                        recipient_name=command.shipping_address.recipient_name,
+                        line_1=command.shipping_address.line_1,
+                        line_2=command.shipping_address.line_2,
+                        city=command.shipping_address.city,
+                        postal_code=command.shipping_address.postal_code,
+                        country_code=command.shipping_address.country_code,
+                    ),
+                    total=total,
+                    status=OrderStatus.PENDING,
+                    version=1,
+                    created_at=now,
+                    updated_at=now,
+                )
+                await uow.orders.add(order)
+                await uow.idempotency.add(
+                    IdempotencyRecord(
+                        customer_id=customer_id,
+                        route=ORDER_CREATE_ROUTE,
+                        key=command.idempotency_key,
+                        request_fingerprint=fingerprint,
+                        order_id=order.id,
+                        expires_at=now + timedelta(hours=24),
+                    )
+                )
+                await uow.commit()
+        except IdempotencyKeyAlreadyExistsError:
+            logger.warning(
+                "ordering.command_duplicate_key_retry",
+                extra={
+                    "context": "ordering",
+                    "operation": "create_order",
+                    "attempt": attempt + 1,
+                },
             )
-        order = await uow.orders.get(existing.order_id)
-        if order is None:
-            raise ApplicationException(
-                "The idempotency record references a missing order."
-            )
+            if attempt == 1:
+                raise
+            continue
+
         logger.info(
-            "ordering.order_creation_replayed",
+            "ordering.order_created",
             extra={
                 "context": "ordering",
                 "operation": "create_order",
@@ -63,52 +129,7 @@ async def create_order(command: CreateOrder, uow: OrderingUowAbs) -> Order:
         )
         return order
 
-    items = tuple(_mock_order_item(item.product_id, item.quantity) for item in command.items)
-    total = Money(
-        amount=sum((item.subtotal.amount for item in items), Decimal("0")),
-        currency=Currency.EUR,
-    )
-    order = Order(
-        id=OrderId(uuid4()),
-        customer_id=customer_id,
-        items=items,
-        shipping_address=ShippingAddress(
-            recipient_name=command.shipping_address.recipient_name,
-            line_1=command.shipping_address.line_1,
-            line_2=command.shipping_address.line_2,
-            city=command.shipping_address.city,
-            postal_code=command.shipping_address.postal_code,
-            country_code=command.shipping_address.country_code,
-        ),
-        total=total,
-        status=OrderStatus.PENDING,
-        version=1,
-        created_at=now,
-        updated_at=now,
-    )
-    async with uow:
-        await uow.orders.add(order)
-        await uow.idempotency.add(
-            IdempotencyRecord(
-                customer_id=customer_id,
-                route=ORDER_CREATE_ROUTE,
-                key=command.idempotency_key,
-                request_fingerprint=fingerprint,
-                order_id=order.id,
-                expires_at=now + timedelta(hours=24),
-            )
-        )
-        await uow.commit()
-    logger.info(
-        "ordering.order_created",
-        extra={
-            "context": "ordering",
-            "operation": "create_order",
-            "aggregate_type": "order",
-            "aggregate_id": str(order.id),
-        },
-    )
-    return order
+    raise AssertionError("The duplicate-key retry loop must return or raise.")
 
 
 def _mock_order_item(product_id, quantity: int) -> OrderItem:

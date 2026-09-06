@@ -85,3 +85,14 @@ async def test_exception_aborts_and_preserves_the_exception() -> None:
 
     assert session.aborted
     assert session.ended
+
+
+@pytest.mark.asyncio
+async def test_commit_requires_an_active_context() -> None:
+    session = FakeSession()
+    uow = OrderingMongoUow(cast(AsyncMongoClient, FakeClient(session)), "ordering")
+
+    with pytest.raises(RuntimeError, match="has not been entered"):
+        await uow.commit()
+
+    assert not session.started

@@ -4,11 +4,12 @@ from uuid import uuid4
 
 import pytest
 from pymongo.errors import DuplicateKeyError
-
 from ordering.application.create_order import create_order
-from ordering.application.idempotency import IdempotencyConflictError
+from ordering.application.idempotency import (
+    IdempotencyConflictError,
+    IdempotencyKeyAlreadyExistsError,
+)
 from ordering.application.uow import OrderingUowAbs
-from ordering.application.messagebus import MessageBus
 from ordering.domain.commands import (
     CreateOrder,
     CreateOrderItem,
@@ -46,31 +47,54 @@ class RecordingIdempotencyRepository(IdempotencyRepositoryAbs):
         self.records[(record.customer_id, record.route, record.key)] = record
 
 
+class DuplicateOrderRepository(RecordingOrderRepository):
+    async def add(self, order) -> None:
+        raise DuplicateKeyError("duplicate order document")
+
+
 class DuplicateOnceIdempotencyRepository(RecordingIdempotencyRepository):
     def __init__(self) -> None:
         super().__init__()
         self.duplicate_raised = False
 
     async def add(self, record: IdempotencyRecord) -> None:
-        await super().add(record)
         if not self.duplicate_raised:
             self.duplicate_raised = True
-            raise DuplicateKeyError("concurrent idempotency insert")
+            raise IdempotencyKeyAlreadyExistsError
+        await super().add(record)
 
 
 class RecordingUow(OrderingUowAbs):
     def __init__(self) -> None:
+        self.active = False
+        self.entered_count = 0
+        self.exited_count = 0
         self.committed = False
+        self._orders_before_transaction = None
+        self._idempotency_records_before_transaction = None
         self.orders = RecordingOrderRepository()
         self.idempotency = RecordingIdempotencyRepository()
 
     async def __aenter__(self) -> "RecordingUow":
+        if self.active:
+            raise RuntimeError("This unit of work is already active.")
+        self.active = True
+        self.entered_count += 1
+        self._orders_before_transaction = self.orders.orders.copy()
+        self._idempotency_records_before_transaction = self.idempotency.records.copy()
         return self
 
     async def __aexit__(self, exc_type, exc, traceback) -> None:
+        if exc_type is not None:
+            self.orders.orders = self._orders_before_transaction
+            self.idempotency.records = self._idempotency_records_before_transaction
+        self.active = False
+        self.exited_count += 1
         return None
 
     async def commit(self) -> None:
+        if not self.active:
+            raise RuntimeError("This unit of work has not been entered.")
         self.committed = True
 
     async def rollback(self) -> None:
@@ -116,6 +140,9 @@ async def test_create_order_handler_returns_a_pending_mock_order() -> None:
     assert order.shipping_address.recipient_name == "Test Customer"
     assert uow.orders.orders[order.id] is order
     assert uow.committed
+    assert uow.entered_count == 1
+    assert uow.exited_count == 1
+    assert not uow.active
 
 
 @pytest.mark.asyncio
@@ -184,10 +211,35 @@ async def test_concurrent_same_key_retries_after_a_duplicate_idempotency_insert(
     uow = RecordingUow()
     uow.idempotency = DuplicateOnceIdempotencyRepository()
 
-    order = await MessageBus(
-        uow, {CreateOrder: lambda message: create_order(message, uow)}
-    ).handle(command)
+    order = await create_order(command, uow)
 
     assert uow.idempotency.duplicate_raised
     assert len(uow.orders.orders) == 1
     assert order.id in uow.orders.orders
+    assert uow.entered_count == 2
+    assert uow.exited_count == 2
+
+
+@pytest.mark.asyncio
+async def test_unrelated_duplicate_key_errors_are_not_retried() -> None:
+    command = CreateOrder(
+        customer_id=uuid4(),
+        items=(CreateOrderItem(product_id=uuid4(), quantity=1),),
+        shipping_address=CreateOrderShippingAddress(
+            recipient_name="Test Customer",
+            line_1="1 Test Street",
+            city="Tehran",
+            postal_code="1234567890",
+            country_code="IR",
+        ),
+        payment_method="test-token",
+        idempotency_key="same-key",
+    )
+    uow = RecordingUow()
+    uow.orders = DuplicateOrderRepository()
+
+    with pytest.raises(DuplicateKeyError, match="duplicate order document"):
+        await create_order(command, uow)
+
+    assert uow.entered_count == 1
+    assert uow.exited_count == 1

@@ -23,10 +23,7 @@ def get_ordering_messagebus(request: Request) -> messagebus.MessageBus:
         for command_type, handler in COMMAND_HANDLERS.items()
     }
 
-    return messagebus.MessageBus(
-        uow=uow,
-        command_handlers=injected_command_handlers,
-    )
+    return messagebus.MessageBus(command_handlers=injected_command_handlers)
 
 
 def inject_dependencies(

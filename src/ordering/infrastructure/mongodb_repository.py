@@ -1,7 +1,5 @@
 """MongoDB repository implementation for Ordering."""
 
-from collections.abc import Callable
-
 from pymongo.asynchronous.client_session import AsyncClientSession
 from pymongo.asynchronous.collection import AsyncCollection
 
@@ -16,18 +14,18 @@ class MongoOrderRepository(OrderRepositoryAbs):
     def __init__(
         self,
         collection: AsyncCollection,
-        session_provider: Callable[[], AsyncClientSession],
+        session: AsyncClientSession | None = None,
     ) -> None:
         self._collection = collection
-        self._session_provider = session_provider
+        self._session_provider = session
 
     async def add(self, order: Order) -> None:
         await self._collection.insert_one(
-            order_to_document(order), session=self._session_provider()
+            order_to_document(order), session=self._session_provider
         )
 
     async def get(self, order_id: OrderId) -> Order | None:
         document = await self._collection.find_one(
-            {"_id": str(order_id)}, session=self._session_provider()
+            {"_id": str(order_id)}, session=self._session_provider
         )
         return None if document is None else order_from_document(document)
